@@ -4,7 +4,7 @@
 #' @importFrom dplyr bind_rows
 #' @export
 geocodeCensus <- function(addresses) {
-  geocode(addresses, 'https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?format=json&benchmark=Public_AR_Current&address=', 0, function(content) {
+  geocodeViaREST(addresses, 'https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?format=json&benchmark=Public_AR_Current&address=', 0, function(content, inputAddress) {
     ret <- NULL
     if (length(content$exceptions) == 0 & length(content$result$addressMatches) > 0) {
       match <- content$result$addressMatches[[1]]
@@ -20,7 +20,21 @@ geocodeCensus <- function(addresses) {
         State = matchComponents$state,
         Zip = matchComponents$zip,
         Latitude=as.numeric(match$coordinates$y),
-        Longitude=as.numeric(match$coordinates$x)
+        Longitude=as.numeric(match$coordinates$x),
+        InputAddress=inputAddress
+      )
+      ret <- df
+    } else {
+      df <- data.frame(
+        stringsAsFactors = FALSE,
+        Number = as.character(NA),
+        Street = as.character(NA),
+        City = as.character(NA),
+        State = as.character(NA),
+        Zip = as.character(NA),
+        Latitude=as.numeric(NA),
+        Longitude=as.numeric(NA),
+        InputAddress=inputAddress
       )
       ret <- df
     }
@@ -34,24 +48,40 @@ geocodeCensus <- function(addresses) {
 #' @importFrom dplyr bind_rows
 #' @export
 geocodeNominatim <- function(addresses) {
-  geocode(addresses, 'http://nominatim.openstreetmap.org?addressdetails=1&format=json&q=', 1.5, function(content) {
-    j <- content[[1]]
-    df <- data.frame(
-      stringsAsFactors = FALSE,
-      Number = j$address$house_number,
-      Street = j$address$road,
-      City = j$address$city,
-      State = j$address$state,
-      Zip = j$address$postcode,
-      Latitude=as.numeric(j$lat),
-      Longitude=as.numeric(j$lon)
-    )
-    df
+  geocodeViaREST(addresses, 'http://nominatim.openstreetmap.org?addressdetails=1&format=json&q=', 1.5, function(content, inputAddress) {
+    ret <- NULL
+    if (length(content) > 0) {
+      j <- content[[1]]
+      ret <- data.frame(
+        stringsAsFactors = FALSE,
+        Number = j$address$house_number,
+        Street = j$address$road,
+        City = j$address$city,
+        State = j$address$state,
+        Zip = j$address$postcode,
+        Latitude=as.numeric(j$lat),
+        Longitude=as.numeric(j$lon),
+        InputAddress=inputAddress
+      )
+    } else {
+      ret <- data.frame(
+        stringsAsFactors = FALSE,
+        Number = as.character(NA),
+        Street = as.character(NA),
+        City = as.character(NA),
+        State = as.character(NA),
+        Zip = as.character(NA),
+        Latitude=as.numeric(NA),
+        Longitude=as.numeric(NA),
+        InputAddress=inputAddress
+      )
+    }
+    ret
   })
 }
 
 #' @importFrom utils URLencode
-geocode <- function(addresses, baseURL, sleep=0, contentToDataFrameFunction) {
+geocodeViaREST <- function(addresses, baseURL, sleep=0, contentToDataFrameFunction) {
 
   ret <- NULL
 
@@ -65,11 +95,10 @@ geocode <- function(addresses, baseURL, sleep=0, contentToDataFrameFunction) {
     url <- paste0(baseURL, URLencode(address))
     response <- GET(url)
     j <- content(response)
-    if (length(j) > 0) {
-      args <- list()
-      args$content <- j
-      dfs[[i]] <- do.call(contentToDataFrameFunction, args)
-    }
+    args <- list()
+    args$content <- j
+    args$inputAddress <- address
+    dfs[[i]] <- do.call(contentToDataFrameFunction, args)
     i <- i + 1
   }
 
@@ -87,14 +116,34 @@ geocode <- function(addresses, baseURL, sleep=0, contentToDataFrameFunction) {
 #' @export
 geocodeGoogle <- function(addresses) {
   ret <- NULL
-  if (length(addresses) > 0) {
-    df <- ggmap::geocode(addresses, output='more') %>% filter(!is.na(lon) & !is.na(lat))
+  dfs <- list()
+  i <- 1
+  for (address in addresses) {
+    df <- ggmap::geocode(address, output='more') %>% filter(!is.na(lon) & !is.na(lat))
     if (nrow(df) > 0) {
-      ret <- df %>%
+      df <- df %>%
         rename(Latitude=lat, Longitude=lon, City=locality, State=administrative_area_level_1, Zip=postal_code, Number=street_number, Street=route) %>%
         select(Number, Street, City, State, Zip, Latitude, Longitude) %>%
-        mutate_each('as.character', -Latitude, -Longitude)
+        mutate_each('as.character', -Latitude, -Longitude) %>%
+        mutate(InputAddress=address)
+    } else {
+      df <- data.frame(
+        stringsAsFactors = FALSE,
+        Number = as.character(NA),
+        Street = as.character(NA),
+        City = as.character(NA),
+        State = as.character(NA),
+        Zip = as.character(NA),
+        Latitude=as.numeric(NA),
+        Longitude=as.numeric(NA),
+        InputAddress=address
+      )
     }
+    dfs[[i]] <- df
+    i <- i + 1
+  }
+  if (length(dfs) > 0) {
+    ret <- bind_rows(dfs)
   }
   ret
 }
