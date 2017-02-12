@@ -1,0 +1,19 @@
+Package: geocode
+Type: Package
+Title: Interface to free geocoding services
+Version: 1.0.0
+URL: https://github.com/scottcame/geocode
+BugReports: https://github.com/scottcame/geocode
+Authors@R: person("Scott", "Came", email = "scottcame10@gmail.com",
+                  role = c("aut", "cre"))
+Description: Geocodes addresses by harmonizing access to Census, OSM Nominatim, and Google (ggmap) geocoders.
+License: Apache Software License 2.0
+Encoding: UTF-8
+LazyData: true
+Imports:
+  dplyr,
+  httr,
+  ggmap
+Suggests:
+    testthat
+RoxygenNote: 5.0.1
