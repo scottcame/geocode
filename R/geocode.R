@@ -1,3 +1,56 @@
+#' Geocode addresses using a hierarchy of geocoders, where later geocoders fill in gaps that earlier ones couldn't handle
+#' @param geocoders the geocoders to try, in order
+#' @param addresses the list of addresses to geocode
+#' @param cache the name of a file to use to cache results (to avoid repeat geocoding of the same addresses), NULL value means don't cache
+#' @import dplyr
+#' @export
+geocode <- function(addresses, geocoders=c('Census', 'Nominatim', 'Google'), cache=NULL) {
+
+  dfs <- list()
+
+  if (!is.null(cache)) {
+    if (file.exists(cache)) {
+      df <- readRDS(cache)
+      addresses <- setdiff(addresses, df$InputAddress)
+      dfs[['cache']] <- df
+    }
+  }
+
+  if (length(addresses) > 0) {
+    gaps <- NULL
+    for (gc in geocoders) {
+
+      f <- paste0('geocode', gc)
+      args <- list()
+      if (is.null(gaps)) {
+        args$addresses <- addresses
+      } else {
+        args$addresses <- gaps$InputAddress
+      }
+      df <- do.call(f, args)
+      gaps <- df %>% filter(is.na(Latitude) | is.na(Longitude))
+      df <- df %>% filter(!is.na(Latitude) & !is.na(Longitude))
+      dfs[[gc]] <- df
+
+      if (nrow(gaps) == 0) {
+        break
+      }
+
+    }
+    if (!is.null(gaps)) {
+      dfs[['gaps']] <- gaps
+    }
+  }
+  ret <- bind_rows(dfs)
+  if (nrow(ret) == 0) {
+    ret <- NULL
+  }
+  if (!is.null(cache) & !is.null(ret)) {
+    saveRDS(ret, cache)
+  }
+  ret
+}
+
 #' Geocode addresses using the Census Geocoder
 #' @param addresses a vector of address strings
 #' @importFrom httr GET content
@@ -38,6 +91,7 @@ geocodeCensus <- function(addresses) {
       )
       ret <- df
     }
+    ret$Source='Census'
     ret
   })
 }
@@ -76,6 +130,7 @@ geocodeNominatim <- function(addresses) {
         InputAddress=inputAddress
       )
     }
+    ret$Source='Nominatim'
     ret
   })
 }
@@ -160,6 +215,7 @@ geocodeGoogle <- function(addresses) {
   }
   if (length(dfs) > 0) {
     ret <- bind_rows(dfs)
+    ret$Source='Google'
   }
   ret
 }
