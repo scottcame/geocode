@@ -29,7 +29,7 @@ test_that('Normal addresses', {
 })
 
 test_that('Non-existent addresses', {
-  expect_equal(geocodeCensus('520 4th Ave E, Olympia, TX 12112'),
+  expect_equal(geocodeNominatim('520 4th Ave E, Olympia, TX 12112'),
                data.frame(
                  stringsAsFactors = FALSE,
                  Number = as.character(NA),
@@ -51,6 +51,42 @@ test_that('Non-existent addresses', {
                           Longitude=c(-122.896375877551, NA),
                           InputAddress=c('520 4th Ave E, Olympia, WA 98501', '520 4th Ave E, Olympia, TX 12221')), tolerance=.000001)
 
+})
+
+test_that('Non-address locations', {
+  expect_equal(geocodeNominatim('Florida'),
+               data.frame(
+                 stringsAsFactors = FALSE,
+                 Number = as.character(NA),
+                 Street = as.character(NA),
+                 City = as.character(NA),
+                 State = 'Florida',
+                 Zip = as.character(NA),
+                 Latitude=27.75677,
+                 Longitude=-81.46398,
+                 InputAddress='Florida'), tolerance=.0001)
+  expect_equal(geocodeNominatim('Boise, Idaho'),
+               data.frame(
+                 stringsAsFactors = FALSE,
+                 Number = as.character(NA),
+                 Street = as.character(NA),
+                 City = 'Boise',
+                 State = 'Idaho',
+                 Zip = as.character(NA),
+                 Latitude=43.61656,
+                 Longitude=-116.2008,
+                 InputAddress='Boise, Idaho'), tolerance=.0001)
+  expect_equal(geocodeNominatim('Gateway Arch, St. Louis, Missouri'),
+               data.frame(
+                 stringsAsFactors = FALSE,
+                 Number = as.character(NA),
+                 Street = as.character(NA),
+                 City = 'St. Louis',
+                 State = 'Missouri',
+                 Zip = '63101',
+                 Latitude=38.62461,
+                 Longitude=-90.18498,
+                 InputAddress='Gateway Arch, St. Louis, Missouri'), tolerance=.0001)
 })
 
 test_that('Empty input', {

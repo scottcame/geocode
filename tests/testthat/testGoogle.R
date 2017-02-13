@@ -29,7 +29,7 @@ test_that('Normal addresses', {
 })
 
 test_that('Non-existent addresses', {
-  expect_equal(geocodeCensus('520 4th Ave E, Olympia, TX 12112'),
+  expect_equal(geocodeGoogle('520 4th Ave E, Olympia, TX 12112'),
                data.frame(
                  stringsAsFactors = FALSE,
                  Number = as.character(NA),
@@ -50,6 +50,42 @@ test_that('Non-existent addresses', {
                           Latitude=c(47.0459, NA),
                           Longitude=c(-122.8957, NA),
                           InputAddress=c('520 4th Ave E, Olympia, WA 98501', '520 4th Ave E, Olympia, TX 11122')), tolerance=.0001)
+})
+
+test_that('Non-address locations', {
+  expect_equal(geocodeGoogle('Florida'),
+               data.frame(
+                 stringsAsFactors = FALSE,
+                 Number = as.character(NA),
+                 Street = as.character(NA),
+                 City = as.character(NA),
+                 State = 'Florida',
+                 Zip = as.character(NA),
+                 Latitude=27.66483,
+                 Longitude=-81.51575,
+                 InputAddress='Florida'), tolerance=.0001)
+  expect_equal(geocodeGoogle('Boise, Idaho'),
+               data.frame(
+                 stringsAsFactors = FALSE,
+                 Number = as.character(NA),
+                 Street = as.character(NA),
+                 City = 'Boise',
+                 State = 'Idaho',
+                 Zip = as.character(NA),
+                 Latitude=43.61871,
+                 Longitude=-116.2146,
+                 InputAddress='Boise, Idaho'), tolerance=.0001)
+  expect_equal(geocodeGoogle('Gateway Arch, St. Louis, Missouri'),
+               data.frame(
+                 stringsAsFactors = FALSE,
+                 Number = as.character(NA),
+                 Street = as.character(NA),
+                 City = 'St. Louis',
+                 State = 'Missouri',
+                 Zip = '63102',
+                 Latitude=38.62469,
+                 Longitude=-90.18478,
+                 InputAddress='Gateway Arch, St. Louis, Missouri'), tolerance=.0001)
 })
 
 test_that('Empty input', {

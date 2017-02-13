@@ -54,11 +54,11 @@ geocodeNominatim <- function(addresses) {
       j <- content[[1]]
       ret <- data.frame(
         stringsAsFactors = FALSE,
-        Number = j$address$house_number,
-        Street = j$address$road,
-        City = j$address$city,
-        State = j$address$state,
-        Zip = j$address$postcode,
+        Number = ifelse(is.null(j$address$house_number), as.character(NA), j$address$house_number),
+        Street = ifelse(is.null(j$address$road), as.character(NA), j$address$road),
+        City = ifelse(is.null(j$address$city), as.character(NA), j$address$city),
+        State = ifelse(is.null(j$address$state), as.character(NA), j$address$state),
+        Zip = ifelse(is.null(j$address$postcode), as.character(NA), j$address$postcode),
         Latitude=as.numeric(j$lat),
         Longitude=as.numeric(j$lon),
         InputAddress=inputAddress
@@ -118,10 +118,25 @@ geocodeGoogle <- function(addresses) {
   ret <- NULL
   dfs <- list()
   i <- 1
+
+  addNACol <- function(df, col) {
+    if (!(col %in% colnames(df))) {
+      df[[col]] <- as.character(NA)
+    }
+    df
+  }
+
   for (address in addresses) {
+
     df <- ggmap::geocode(address, output='more') %>% filter(!is.na(lon) & !is.na(lat))
+
     if (nrow(df) > 0) {
       df <- df %>%
+        addNACol('locality') %>%
+        addNACol('administrative_area_level_1') %>%
+        addNACol('postal_code') %>%
+        addNACol('street_number') %>%
+        addNACol('route') %>%
         rename(Latitude=lat, Longitude=lon, City=locality, State=administrative_area_level_1, Zip=postal_code, Number=street_number, Street=route) %>%
         select(Number, Street, City, State, Zip, Latitude, Longitude) %>%
         mutate_each('as.character', -Latitude, -Longitude) %>%
@@ -139,6 +154,7 @@ geocodeGoogle <- function(addresses) {
         InputAddress=address
       )
     }
+
     dfs[[i]] <- df
     i <- i + 1
   }
