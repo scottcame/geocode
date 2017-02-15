@@ -22,7 +22,7 @@ Usage
 
 Default usage, attempts Census first, then Nominatim, then Google:
 
-``` r
+```
 > library(geocode)
 > stadiums <- c(safeco='1250 1st Avenue South, Seattle, WA 98134', progressive='2401 Ontario St, Cleveland, OH 44115', yankee='Yankee Stadium')
 > geocode(stadiums)
@@ -34,7 +34,7 @@ Default usage, attempts Census first, then Nominatim, then Google:
 
 Or just go straight to Google:
 
-``` r
+```
 > geocode(stadiums, geocoders='Google')
 Information from URL : http://maps.googleapis.com/maps/api/geocode/json?address=1250%201st%20Avenue%20South,%20Seattle,%20WA%2098134&sensor=false
 Information from URL : http://maps.googleapis.com/maps/api/geocode/json?address=2401%20Ontario%20St,%20Cleveland,%20OH%2044115&sensor=false
@@ -47,7 +47,7 @@ Information from URL : http://maps.googleapis.com/maps/api/geocode/json?address=
 
 An unresolvable address:
 
-``` r
+```
 > geocode('A non-existent address, Chicago, IL')
 Information from URL : http://maps.googleapis.com/maps/api/geocode/json?address=A%20non-existent%20address,%20Chicago,%20IL&sensor=false
   Number Street City State  Zip Latitude Longitude                        InputAddress Source
@@ -58,7 +58,7 @@ geocode failed with status ZERO_RESULTS, location = "A non-existent address, Chi
 
 Centroid of a jurisdiction (state, county, etc.):
 
-``` r
+```
 > geocode('Kennebec County, ME')
   Number Street City State  Zip Latitude Longitude        InputAddress    Source
 1   <NA>   <NA> <NA> Maine <NA> 44.41846 -69.82507 Kennebec County, ME Nominatim
