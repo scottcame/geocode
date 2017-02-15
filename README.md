@@ -22,7 +22,7 @@ Usage
 
 Default usage, attempts Census first, then Nominatim, then Google:
 
-``` r
+```
 > library(geocode)
 > stadiums <- c(safeco='1250 1st Avenue South, Seattle, WA 98134', progressive='2401 Ontario St, Cleveland, OH 44115', yankee='Yankee Stadium')
 > geocode(stadiums)
@@ -30,11 +30,12 @@ Default usage, attempts Census first, then Nominatim, then Google:
 1 2401-2599       ONTARIO ST CLEVELAND         OH 44115 41.49500  -81.68713     2401 Ontario St, Cleveland, OH 44115    Census
 2      1250 1st Avenue South   Seattle Washington 98134 47.59185 -122.33396 1250 1st Avenue South, Seattle, WA 98134 Nominatim
 3         1             <NA>       NYC   New York 10451 40.82958  -73.92652                           Yankee Stadium Nominatim
->```
+>
+```
 
 Or just go straight to Google:
 
-``` r
+```
 > geocode(stadiums, geocoders='Google')
 Information from URL : http://maps.googleapis.com/maps/api/geocode/json?address=1250%201st%20Avenue%20South,%20Seattle,%20WA%2098134&sensor=false
 Information from URL : http://maps.googleapis.com/maps/api/geocode/json?address=2401%20Ontario%20St,%20Cleveland,%20OH%2044115&sensor=false
@@ -43,23 +44,26 @@ Information from URL : http://maps.googleapis.com/maps/api/geocode/json?address=
 1   1250  1st Avenue South   Seattle Washington 98134 47.59134 -122.33201 1250 1st Avenue South, Seattle, WA 98134 Google
 2   2401    Ontario Street Cleveland       Ohio 44115 41.49570  -81.68527     2401 Ontario St, Cleveland, OH 44115 Google
 3      1 East 161st Street      <NA>   New York 10451 40.82964  -73.92617                           Yankee Stadium Google
->```
+>
+```
 
 An unresolvable address:
 
-``` r
+```
 > geocode('A non-existent address, Chicago, IL')
 Information from URL : http://maps.googleapis.com/maps/api/geocode/json?address=A%20non-existent%20address,%20Chicago,%20IL&sensor=false
   Number Street City State  Zip Latitude Longitude                        InputAddress Source
 1   <NA>   <NA> <NA>  <NA> <NA>       NA        NA A non-existent address, Chicago, IL Google
 Warning message:
 geocode failed with status ZERO_RESULTS, location = "A non-existent address, Chicago, IL" 
->```
+>
+```
 
 Centroid of a jurisdiction (state, county, etc.):
 
-``` r
+```
 > geocode('Kennebec County, ME')
   Number Street City State  Zip Latitude Longitude        InputAddress    Source
 1   <NA>   <NA> <NA> Maine <NA> 44.41846 -69.82507 Kennebec County, ME Nominatim
->```
+>
+```
