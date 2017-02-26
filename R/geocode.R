@@ -57,43 +57,44 @@ geocode <- function(addresses, geocoders=c('Census', 'Nominatim', 'Google'), cac
 #' @importFrom dplyr bind_rows
 #' @export
 geocodeCensus <- function(addresses) {
-  geocodeViaREST(addresses, 'https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?format=json&benchmark=Public_AR_Current&address=', 0, function(content, inputAddress) {
-    ret <- NULL
-    if (length(content$exceptions) == 0 & length(content$result$addressMatches) > 0) {
-      match <- content$result$addressMatches[[1]]
-      matchComponents <- match$addressComponents
-      df <- data.frame(
-        stringsAsFactors = FALSE,
-        Number = paste0(matchComponents$fromAddress, '-', matchComponents$toAddress),
-        Street = gsub(x=trimws(paste0(matchComponents$preQualifier, ' ', matchComponents$preDirection, ' ', matchComponents$preType, ' ',
-                                      matchComponents$streetName,
-                                      ' ', matchComponents$suffixType, ' ', matchComponents$suffixQualifier, ' ', matchComponents$suffixDirection)),
-                      pattern='[ ]+', replacement=' '),
-        City = matchComponents$city,
-        State = matchComponents$state,
-        Zip = matchComponents$zip,
-        Latitude=as.numeric(match$coordinates$y),
-        Longitude=as.numeric(match$coordinates$x),
-        InputAddress=inputAddress
-      )
-      ret <- df
-    } else {
-      df <- data.frame(
-        stringsAsFactors = FALSE,
-        Number = as.character(NA),
-        Street = as.character(NA),
-        City = as.character(NA),
-        State = as.character(NA),
-        Zip = as.character(NA),
-        Latitude=as.numeric(NA),
-        Longitude=as.numeric(NA),
-        InputAddress=inputAddress
-      )
-      ret <- df
-    }
-    ret$Source='Census'
-    ret
-  })
+  geocodeViaREST(addresses, 'https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?format=json&benchmark=Public_AR_Current&address=', 0,
+                 function(content, inputAddress) {
+                   ret <- NULL
+                   if (length(content) > 0 & length(content$exceptions) == 0 & length(content$result$addressMatches) > 0) {
+                     match <- content$result$addressMatches[[1]]
+                     matchComponents <- match$addressComponents
+                     df <- data.frame(
+                       stringsAsFactors = FALSE,
+                       Number = paste0(matchComponents$fromAddress, '-', matchComponents$toAddress),
+                       Street = gsub(x=trimws(paste0(matchComponents$preQualifier, ' ', matchComponents$preDirection, ' ', matchComponents$preType, ' ',
+                                                     matchComponents$streetName,
+                                                     ' ', matchComponents$suffixType, ' ', matchComponents$suffixQualifier, ' ', matchComponents$suffixDirection)),
+                                     pattern='[ ]+', replacement=' '),
+                       City = matchComponents$city,
+                       State = matchComponents$state,
+                       Zip = matchComponents$zip,
+                       Latitude=as.numeric(match$coordinates$y),
+                       Longitude=as.numeric(match$coordinates$x),
+                       InputAddress=inputAddress
+                     )
+                     ret <- df
+                   } else {
+                     df <- data.frame(
+                       stringsAsFactors = FALSE,
+                       Number = as.character(NA),
+                       Street = as.character(NA),
+                       City = as.character(NA),
+                       State = as.character(NA),
+                       Zip = as.character(NA),
+                       Latitude=as.numeric(NA),
+                       Longitude=as.numeric(NA),
+                       InputAddress=inputAddress
+                     )
+                     ret <- df
+                   }
+                   ret$Source='Census'
+                   ret
+                 }, TRUE)
 }
 
 #' Geocode addreses using the Nominatim service provided by Open Street Map
@@ -132,11 +133,11 @@ geocodeNominatim <- function(addresses) {
     }
     ret$Source='Nominatim'
     ret
-  })
+  }, TRUE)
 }
 
 #' @importFrom utils URLencode
-geocodeViaREST <- function(addresses, baseURL, sleep=0, contentToDataFrameFunction) {
+geocodeViaREST <- function(addresses, baseURL, sleep=0, contentToDataFrameFunction, nullOutZipOnlyAddresses) {
 
   ret <- NULL
 
@@ -147,9 +148,12 @@ geocodeViaREST <- function(addresses, baseURL, sleep=0, contentToDataFrameFuncti
     if (i > 1) {
       Sys.sleep(sleep)
     }
-    url <- paste0(baseURL, URLencode(address))
-    response <- GET(url)
-    j <- content(response)
+    j <- list()
+    if (!nullOutZipOnlyAddresses | !grepl(x=trimws(address), pattern='^[0-9]+$')) {
+      url <- paste0(baseURL, URLencode(address))
+      response <- GET(url)
+      j <- content(response)
+    }
     args <- list()
     args$content <- j
     args$inputAddress <- address

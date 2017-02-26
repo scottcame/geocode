@@ -3,7 +3,6 @@ library(geocode)
 context('Combined geocoding')
 
 test_that('Normal addresses', {
-
   expect_equal(geocode(c('1250 1st Avenue South, Seattle, WA 98134', '4550 Wyoga Lake Rd, Cuyahoga Falls, OH 44224', 'Utah')),
                data.frame(stringsAsFactors=FALSE,
                           Number=c('1100-1298', '4500-4672', NA),
@@ -15,6 +14,21 @@ test_that('Normal addresses', {
                           Longitude=c(-122.33419, -81.49443, -111.71436),
                           InputAddress=c('1250 1st Avenue South, Seattle, WA 98134', '4550 Wyoga Lake Rd, Cuyahoga Falls, OH 44224', 'Utah'),
                           Source=c(rep('Census',2), 'Nominatim')),
+               tolerance=.000001)
+})
+
+test_that('Zip only', {
+  expect_equal(geocode(c('1250 1st Avenue South, Seattle, WA 98134', '98501')),
+               data.frame(stringsAsFactors=FALSE,
+                          Number=c('1100-1298', NA),
+                          Street=c('1ST AVE S', NA),
+                          City=c('SEATTLE', 'Olympia'),
+                          State=c('WA', 'Washington'),
+                          Zip=c('98134','98501'),
+                          Latitude=c(47.5909, 46.97702),
+                          Longitude=c(-122.33419, -122.8584),
+                          InputAddress=c('1250 1st Avenue South, Seattle, WA 98134', '98501'),
+                          Source=c('Census', 'Google')),
                tolerance=.000001)
 })
 
