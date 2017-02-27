@@ -31,7 +31,7 @@ test_that('Normal addresses', {
 })
 
 test_that('Non-existent addresses', {
-  expect_equal(geocodeGoogle('520 4th Ave E, Olympia, TX 12112'),
+  expect_equal(geocodeGoogle('123 g, lorem 12365 ipsus'),
                data.frame(
                  stringsAsFactors = FALSE,
                  Number = as.character(NA),
@@ -41,9 +41,9 @@ test_that('Non-existent addresses', {
                  Zip = as.character(NA),
                  Latitude=as.numeric(NA),
                  Longitude=as.numeric(NA),
-                 InputAddress='520 4th Ave E, Olympia, TX 12112',
+                 InputAddress='123 g, lorem 12365 ipsus',
                  Source='Google'))
-  expect_equal(geocodeGoogle(c('520 4th Ave E, Olympia, WA 98501', '520 4th Ave E, Olympia, TX 11122')),
+  expect_equal(geocodeGoogle(c('520 4th Ave E, Olympia, WA 98501', '123 g, lorem 12365 ipsus')),
                data.frame(stringsAsFactors=FALSE,
                           Number=c('520', NA),
                           Street=c('4th Avenue East', NA),
@@ -52,7 +52,7 @@ test_that('Non-existent addresses', {
                           Zip=c('98501', NA),
                           Latitude=c(47.0459, NA),
                           Longitude=c(-122.8957, NA),
-                          InputAddress=c('520 4th Ave E, Olympia, WA 98501', '520 4th Ave E, Olympia, TX 11122'),
+                          InputAddress=c('520 4th Ave E, Olympia, WA 98501', '123 g, lorem 12365 ipsus'),
                           Source=rep('Google',2)), tolerance=.0001)
 })
 

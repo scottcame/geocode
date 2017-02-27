@@ -6,6 +6,8 @@
 #' @export
 geocode <- function(addresses, geocoders=c('Census', 'Nominatim', 'Google'), cache=NULL) {
 
+  remergeDf <- data.frame(addresses=addresses, stringsAsFactors=FALSE) %>% mutate(seqOrder=row_number())
+
   dfs <- list()
 
   if (!is.null(cache)) {
@@ -44,6 +46,10 @@ geocode <- function(addresses, geocoders=c('Census', 'Nominatim', 'Google'), cac
   ret <- bind_rows(dfs)
   if (nrow(ret) == 0) {
     ret <- NULL
+  } else {
+    ret <- unique(ret) %>% mutate(jInputAddress=InputAddress)
+    ret <- left_join(remergeDf, ret, by=c('addresses'='jInputAddress')) %>% arrange(seqOrder) %>%
+      select(-addresses, -seqOrder)
   }
   if (!is.null(cache) & !is.null(ret)) {
     saveRDS(ret, cache)
