@@ -1,231 +1,255 @@
 #' Geocode addresses using a hierarchy of geocoders, where later geocoders fill in gaps that earlier ones couldn't handle
 #' @param geocoders the geocoders to try, in order
 #' @param addresses the list of addresses to geocode
-#' @param cache the name of a file to use to cache results (to avoid repeat geocoding of the same addresses), NULL value means don't cache
+#' @param ... additional named arguments passed to specific geocoder functions
 #' @import dplyr
+#' @import tibble
+#' @return a data frame with the results of geocoding, with the SourceIndex column providing the index into the input address vector
 #' @export
-geocode <- function(addresses, geocoders=c('Census', 'Nominatim', 'Google'), cache=NULL) {
+geocode <- function(addresses, geocoders=c('Census', 'Nominatim', 'Google'), ...) {
 
-  remergeDf <- data.frame(addresses=addresses, stringsAsFactors=FALSE) %>% mutate(seqOrder=row_number())
+  ret <- tibble()
 
-  dfs <- list()
+  addresses <- trimws(addresses)
 
-  if (!is.null(cache)) {
-    if (file.exists(cache)) {
-      df <- readRDS(cache)
-      addresses <- setdiff(addresses, df$InputAddress)
-      dfs[['cache']] <- df
-    }
-  }
+  uniqueAddresses <- unique(addresses) %>% na.omit() %>% as.vector()
+  indices <- seq(length(uniqueAddresses))
+  names(indices) <- uniqueAddresses
 
-  if (length(addresses) > 0) {
-    gaps <- NULL
-    for (gc in geocoders) {
+  missings <- uniqueAddresses
 
-      f <- paste0('geocode', gc)
+  for (geocoder in geocoders) {
+    if (length(uniqueAddresses) > 0) {
+      f <- paste0('geocode', geocoder)
       args <- list()
-      if (is.null(gaps)) {
-        args$addresses <- addresses
-      } else {
-        args$addresses <- gaps$InputAddress
+      args$addresses <- missings
+      args <- c(args, list(...))
+      ret <- bind_rows(ret, do.call(f, args))
+      successes <- character()
+      if (nrow(ret)) {
+        successes <- ret$InputAddress
       }
-      df <- do.call(f, args)
-      gaps <- df %>% filter(is.na(Latitude) | is.na(Longitude))
-      df <- df %>% filter(!is.na(Latitude) & !is.na(Longitude))
-      dfs[[gc]] <- df
-
-      if (nrow(gaps) == 0) {
-        break
-      }
-
-    }
-    if (!is.null(gaps)) {
-      dfs[['gaps']] <- gaps
+      missings <- setdiff(uniqueAddresses, successes)
     }
   }
-  ret <- bind_rows(dfs)
-  if (nrow(ret) == 0) {
-    ret <- NULL
-  } else {
-    ret <- unique(ret) %>% mutate(jInputAddress=InputAddress)
-    ret <- left_join(remergeDf, ret, by=c('addresses'='jInputAddress')) %>% arrange(seqOrder) %>%
-      select(-addresses, -seqOrder)
+
+  if (nrow(ret)) {
+
+    ret <- select(ret, -SourceIndex) %>%
+      right_join(tibble(InputAddress=addresses) %>% mutate(SourceIndex=row_number()), by='InputAddress') %>%
+      filter(!is.na(Source))
+
   }
-  if (!is.null(cache) & !is.null(ret)) {
-    saveRDS(ret, cache)
-  }
+
   ret
+
 }
 
 #' Geocode addresses using the Census Geocoder
 #' @param addresses a vector of address strings
-#' @importFrom httr GET content
-#' @importFrom dplyr bind_rows
+#' @param ... unused
+#' @importFrom jsonlite fromJSON
+#' @import dplyr
+#' @import tibble
+#' @importFrom purrr map2_df
+#' @return a data frame with the results of geocoding, with the SourceIndex column providing the index into the input address vector
 #' @export
-geocodeCensus <- function(addresses) {
-  geocodeViaREST(addresses, 'https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?format=json&benchmark=Public_AR_Current&address=', 0,
-                 function(content, inputAddress) {
-                   ret <- NULL
-                   if (length(content) > 0 & length(content$exceptions) == 0 & length(content$result$addressMatches) > 0) {
-                     match <- content$result$addressMatches[[1]]
-                     matchComponents <- match$addressComponents
-                     df <- data.frame(
-                       stringsAsFactors = FALSE,
-                       Number = paste0(matchComponents$fromAddress, '-', matchComponents$toAddress),
-                       Street = gsub(x=trimws(paste0(matchComponents$preQualifier, ' ', matchComponents$preDirection, ' ', matchComponents$preType, ' ',
-                                                     matchComponents$streetName,
-                                                     ' ', matchComponents$suffixType, ' ', matchComponents$suffixQualifier, ' ', matchComponents$suffixDirection)),
-                                     pattern='[ ]+', replacement=' '),
-                       City = matchComponents$city,
-                       State = matchComponents$state,
-                       Zip = matchComponents$zip,
-                       Latitude=as.numeric(match$coordinates$y),
-                       Longitude=as.numeric(match$coordinates$x),
-                       InputAddress=inputAddress
-                     )
-                     ret <- df
-                   } else {
-                     df <- data.frame(
-                       stringsAsFactors = FALSE,
-                       Number = as.character(NA),
-                       Street = as.character(NA),
-                       City = as.character(NA),
-                       State = as.character(NA),
-                       Zip = as.character(NA),
-                       Latitude=as.numeric(NA),
-                       Longitude=as.numeric(NA),
-                       InputAddress=inputAddress
-                     )
-                     ret <- df
-                   }
-                   ret$Source='Census'
-                   ret
-                 }, TRUE)
+geocodeCensus <- function(addresses, ...) {
+
+  baseURL <- 'https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?format=json&benchmark=Public_AR_Current&address='
+
+  indices <- seq(length(addresses))
+
+  sel <- !grepl(x=trimws(addresses), pattern='^[0-9]+$')
+  indices <- indices[sel]
+  addresses <- addresses[sel]
+
+  map2_df(addresses, indices, function(address, index) {
+
+    url <- paste0(baseURL, URLencode(address))
+    content <- fromJSON(url, simplifyDataFrame=FALSE)
+
+    ret <- NULL
+
+    if (!is.null(content)) {
+
+      result <- content$result
+
+      if (!is.null(result)) {
+
+        addressMatches <- result$addressMatches
+
+        if (length(addressMatches) > 0) {
+
+          matchComponents <- addressMatches[[1]]$addressComponents
+          coords <- addressMatches[[1]]$coordinates
+
+          ret <- tibble(
+            Number = paste0(matchComponents$fromAddress, '-', matchComponents$toAddress),
+            Street = gsub(x=trimws(paste0(matchComponents$preQualifier, ' ',
+                                          matchComponents$preDirection, ' ',
+                                          matchComponents$preType, ' ',
+                                          matchComponents$streetName, ' ',
+                                          matchComponents$suffixType, ' ',
+                                          matchComponents$suffixQualifier, ' ',
+                                          matchComponents$suffixDirection)),
+                          pattern='[ ]+', replacement=' '),
+            City = matchComponents$city,
+            State = matchComponents$state,
+            Zip = matchComponents$zip,
+            Latitude=as.numeric(coords$y),
+            Longitude=as.numeric(coords$x),
+            InputAddress=address,
+            Approximate=(FALSE),
+            Source='Census',
+            SourceIndex=index
+          )
+
+        }
+
+      }
+
+      Sys.sleep(1.5 * (index < max(indices)))
+
+    }
+
+    ret
+
+  })
+
 }
 
 #' Geocode addreses using the Nominatim service provided by Open Street Map
 #' @param addresses a vector of address strings
-#' @importFrom httr GET content
-#' @importFrom dplyr bind_rows
+#' @param nominatimServiceURL the base address of the nominatim service to use; include everything that precedes the ?
+#' @param ... unused
+#' @importFrom jsonlite fromJSON
+#' @import dplyr
+#' @import tibble
+#' @importFrom purrr map2_df
+#' @return a data frame with the results of geocoding, with the SourceIndex column providing the index into the input address vector
 #' @export
-geocodeNominatim <- function(addresses) {
-  geocodeViaREST(addresses, 'http://nominatim.openstreetmap.org?addressdetails=1&format=json&q=', 1.5, function(content, inputAddress) {
+geocodeNominatim <- function(addresses, nominatimServiceURL='http://nominatim.openstreetmap.org', ...) {
+
+  baseURL <- paste0(nominatimServiceURL, '?addressdetails=1&format=json&q=')
+
+  indices <- seq(length(addresses))
+
+  sel <- !grepl(x=trimws(addresses), pattern='^[0-9]+$')
+  indices <- indices[sel]
+  addresses <- addresses[sel]
+
+  map2_df(addresses, indices, function(address, index) {
+
+    url <- paste0(baseURL, URLencode(address))
+    content <- fromJSON(url, simplifyDataFrame=FALSE)
+
     ret <- NULL
+
     if (length(content) > 0) {
+
       j <- content[[1]]
-      ret <- data.frame(
-        stringsAsFactors = FALSE,
-        Number = ifelse(is.null(j$address$house_number), as.character(NA), j$address$house_number),
-        Street = ifelse(is.null(j$address$road), as.character(NA), j$address$road),
-        City = ifelse(is.null(j$address$city), as.character(NA), j$address$city),
-        State = ifelse(is.null(j$address$state), as.character(NA), j$address$state),
-        Zip = ifelse(is.null(j$address$postcode), as.character(NA), j$address$postcode),
+
+      ret <- tibble(
+        Number = ifelse(is.null(j$address$house_number), NA_character_, j$address$house_number),
+        Street = ifelse(is.null(j$address$road), NA_character_, j$address$road),
+        City = ifelse(is.null(j$address$city), NA_character_, j$address$city),
+        State = ifelse(is.null(j$address$state), NA_character_, j$address$state),
+        Zip = ifelse(is.null(j$address$postcode), NA_character_, j$address$postcode),
         Latitude=as.numeric(j$lat),
         Longitude=as.numeric(j$lon),
-        InputAddress=inputAddress
+        InputAddress=address,
+        Approximate=(is.null(j$address$house_number)),
+        Source='Nominatim',
+        SourceIndex=index
       )
-    } else {
-      ret <- data.frame(
-        stringsAsFactors = FALSE,
-        Number = as.character(NA),
-        Street = as.character(NA),
-        City = as.character(NA),
-        State = as.character(NA),
-        Zip = as.character(NA),
-        Latitude=as.numeric(NA),
-        Longitude=as.numeric(NA),
-        InputAddress=inputAddress
-      )
+
+      Sys.sleep(1.5 * (index < max(indices)))
+
     }
-    ret$Source='Nominatim'
+
     ret
-  }, TRUE)
-}
 
-#' @importFrom utils URLencode
-geocodeViaREST <- function(addresses, baseURL, sleep=0, contentToDataFrameFunction, nullOutZipOnlyAddresses) {
-
-  ret <- NULL
-
-  dfs <- list()
-  i <- 1
-
-  for (address in addresses) {
-    if (i > 1) {
-      Sys.sleep(sleep)
-    }
-    j <- list()
-    if (!nullOutZipOnlyAddresses | !grepl(x=trimws(address), pattern='^[0-9]+$')) {
-      url <- paste0(baseURL, URLencode(address))
-      response <- GET(url)
-      j <- content(response)
-    }
-    args <- list()
-    args$content <- j
-    args$inputAddress <- address
-    dfs[[i]] <- do.call(contentToDataFrameFunction, args)
-    i <- i + 1
-  }
-
-  if (length(dfs) > 0) {
-    ret <- bind_rows(dfs)
-  }
-
-  ret
+  })
 
 }
 
-#' Geocode addresses using the Google API, via the ggmap package
+#' Geocode addreses using the Nominatim service provided by Open Street Map
 #' @param addresses a vector of address strings
+#' @param ... unused
+#' @importFrom httr GET content
+#' @importFrom purrr map_df map2_df
+#' @import tibble
 #' @import dplyr
+#' @return a data frame with the results of geocoding, with the SourceIndex column providing the index into the input address vector
 #' @export
-geocodeGoogle <- function(addresses) {
-  ret <- NULL
-  dfs <- list()
-  i <- 1
+geocodeGoogle <- function(addresses, ...) {
 
-  addNACol <- function(df, col) {
-    if (!(col %in% colnames(df))) {
-      df[[col]] <- as.character(NA)
+  baseURL <- 'https://maps.googleapis.com/maps/api/geocode/json?address='
+
+  indices <- seq(length(addresses))
+
+  sel <- !grepl(x=trimws(addresses), pattern='^[0-9]+$')
+  indices <- indices[sel]
+  addresses <- addresses[sel]
+
+  map2_df(addresses, indices, function(address, index) {
+
+    url <- paste0(baseURL, URLencode(address))
+    content <- fromJSON(url, simplifyDataFrame=FALSE)
+
+    ret <- NULL
+
+    if (length(content) > 1) {
+
+      results <- content$results
+
+      if (length(results) > 0) {
+
+        results <- results[[1]]
+
+        ac <- results$address_components
+        location <- results$geometry$location
+
+        if (!is.null(ac)) {
+
+          addNAField <- function(df_, fieldName) {
+            if (!nrow(df_ %>% filter(field==fieldName))) {
+              df_ <- bind_rows(df_, tibble(field=fieldName, value=NA_character_))
+            }
+            df_
+          }
+
+          ret <- ac %>% map_df(function(ll) {tibble(field=ll$types, value=ll$short_name)}) %>%
+            filter(!(field %in% c('political')))
+
+          if (nrow(filter(ret, field %in% c('administrative_area_level_1', 'postal_code')))) {
+
+            ret <- ret %>%
+              addNAField('street_number') %>%
+              addNAField('route') %>%
+              addNAField('locality') %>%
+              addNAField('sublocality') %>%
+              addNAField('administrative_area_level_1') %>%
+              addNAField('postal_code') %>%
+              spread(key=field, value=value) %>%
+              mutate(locality=ifelse(is.na(locality), sublocality, locality)) %>%
+              select(Number=street_number, Street=route, City=locality, State=administrative_area_level_1, Zip=postal_code) %>%
+              mutate(Latitude=location$lat, Longitude=location$lng, Source='Google',
+                     Approximate=is.na(Number), InputAddress=address, SourceIndex=index)
+
+          }
+
+        }
+
+      }
+
+      Sys.sleep(1.5 * (index < max(indices)))
+
     }
-    df
-  }
 
-  for (address in addresses) {
+    ret
 
-    df <- ggmap::geocode(address, output='more') %>% filter(!is.na(lon) & !is.na(lat))
+  })
 
-    if (nrow(df) > 0) {
-      df <- df %>%
-        addNACol('locality') %>%
-        addNACol('administrative_area_level_1') %>%
-        addNACol('postal_code') %>%
-        addNACol('street_number') %>%
-        addNACol('route') %>%
-        rename(Latitude=lat, Longitude=lon, City=locality, State=administrative_area_level_1, Zip=postal_code, Number=street_number, Street=route) %>%
-        select(Number, Street, City, State, Zip, Latitude, Longitude) %>%
-        mutate_each('as.character', -Latitude, -Longitude) %>%
-        mutate(InputAddress=address)
-    } else {
-      df <- data.frame(
-        stringsAsFactors = FALSE,
-        Number = as.character(NA),
-        Street = as.character(NA),
-        City = as.character(NA),
-        State = as.character(NA),
-        Zip = as.character(NA),
-        Latitude=as.numeric(NA),
-        Longitude=as.numeric(NA),
-        InputAddress=address
-      )
-    }
-
-    dfs[[i]] <- df
-    i <- i + 1
-  }
-  if (length(dfs) > 0) {
-    ret <- bind_rows(dfs)
-    ret$Source='Google'
-  }
-  ret
 }
