@@ -7,6 +7,11 @@ Each of these geocoding services is useful in its own right, but the goal of thi
 have usage limits, but allow for richer and more varied queries than the US Census geocoder.  A common use case is to try the US Census geocoder first, and if it doesn't succeed, then try the others.  This
 package implements this use case.
 
+This package does not attempt to prevent the user from exceeding the rate/usage limits for [Google](https://developers.google.com/maps/documentation/geocoding/usage-limits) and 
+[Nominatim](https://operations.osmfoundation.org/policies/nominatim/).  The `geocodeNominatim()` function takes an optional parameter, `nominatimServiceURL`, that directs the client to an alternative
+instance of Nominatim (e.g., one running locally or on a private network). Setting up Nominatim can be a bit of a chore, but I have made it a bit easier with [Docker](https://www.docker.com/) 
+[images](https://github.com/scottcame/docker/tree/master/nominatim).
+
 Installation
 ------------
 
