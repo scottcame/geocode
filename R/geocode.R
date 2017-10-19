@@ -1,12 +1,13 @@
 #' Geocode addresses using a hierarchy of geocoders, where later geocoders fill in gaps that earlier ones couldn't handle
 #' @param geocoders the geocoders to try, in order
 #' @param addresses the list of addresses to geocode
+#' @param sleep number of seconds to sleep between requests (to avoid exceeding rate limits)
 #' @param ... additional named arguments passed to specific geocoder functions
 #' @import dplyr
 #' @import tibble
 #' @return a data frame with the results of geocoding, with the SourceIndex column providing the index into the input address vector
 #' @export
-geocode <- function(addresses, geocoders=c('Census', 'Nominatim', 'Google'), ...) {
+geocode <- function(addresses, geocoders=c('Census', 'Nominatim', 'Google'), sleep=1.5, ...) {
 
   ret <- tibble()
 
@@ -23,6 +24,7 @@ geocode <- function(addresses, geocoders=c('Census', 'Nominatim', 'Google'), ...
       f <- paste0('geocode', geocoder)
       args <- list()
       args$addresses <- missings
+      args$sleep <- sleep
       args <- c(args, list(...))
       ret <- bind_rows(ret, do.call(f, args))
       successes <- character()
@@ -45,8 +47,11 @@ geocode <- function(addresses, geocoders=c('Census', 'Nominatim', 'Google'), ...
 
 }
 
-#' Geocode addresses using the Census Geocoder
+#' Geocode addresses using an ArcGIS "findAddressCandidates" GeocodeServer service
 #' @param addresses a vector of address strings
+#' @param sleep number of seconds to sleep between requests (to avoid exceeding rate limits)
+#' @param arcgisServiceURL base URL of the service address, up to and including the last forward slash preceding "findAddressCandidates?"
+#' @param approximationThreshold the score value in the ArcGIS response below which a candidate is considered approximate
 #' @param ... unused
 #' @importFrom jsonlite fromJSON
 #' @import dplyr
@@ -54,7 +59,71 @@ geocode <- function(addresses, geocoders=c('Census', 'Nominatim', 'Google'), ...
 #' @importFrom purrr map2_df
 #' @return a data frame with the results of geocoding, with the SourceIndex column providing the index into the input address vector
 #' @export
-geocodeCensus <- function(addresses, ...) {
+geocodeArcGIS <- function(addresses, arcgisServiceURL='http://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/', approximationThreshold=90, sleep=1.5, ...) {
+
+  baseURL <- paste0(arcgisServiceURL, 'findAddressCandidates?singleLine=')
+
+  indices <- seq(length(addresses))
+
+  sel <- !grepl(x=trimws(addresses), pattern='^[0-9]+$')
+  indices <- indices[sel]
+  addresses <- addresses[sel]
+
+  map2_df(addresses, indices, function(address, index) {
+
+    url <- paste0(baseURL, URLencode(address), '&f=json&outFields=AddNum,StPreDir,StName,StType,StDir,City,Region,Postal')
+    content <- fromJSON(url, simplifyDataFrame=FALSE)
+
+    ret <- NULL
+
+    if (!is.null(content)) {
+
+      candidates <- content$candidates
+
+      if (length(candidates) > 0) {
+
+        candidate <- candidates[[1]]
+        street <- trimws(paste(candidate$attributes$StPreDir, candidate$attributes$StName, candidate$attributes$StType, candidate$attributes$StDir))
+
+        ret <- tibble(
+          Number=candidate$attributes$AddNum,
+          Street=street,
+          City=candidate$attributes$City,
+          State=candidate$attributes$Region,
+          Zip=candidate$attributes$Postal,
+          Latitude=candidate$location$y,
+          Longitude=candidate$location$x,
+          InputAddress=address,
+          Approximate=FALSE,
+          Source='ArcGIS',
+          SourceIndex=index
+        ) %>%
+          mutate_if(is.character, function(v) {ifelse(trimws(v)=='', NA_character_, v)}) %>%
+          mutate(Approximate=candidate$score < approximationThreshold | is.na(Number))
+
+      }
+
+    }
+
+    Sys.sleep(sleep * (index < max(indices)))
+
+    ret
+
+  })
+
+}
+
+#' Geocode addresses using the Census Geocoder
+#' @param addresses a vector of address strings
+#' @param sleep number of seconds to sleep between requests (to avoid exceeding rate limits)
+#' @param ... unused
+#' @importFrom jsonlite fromJSON
+#' @import dplyr
+#' @import tibble
+#' @importFrom purrr map2_df
+#' @return a data frame with the results of geocoding, with the SourceIndex column providing the index into the input address vector
+#' @export
+geocodeCensus <- function(addresses, sleep=1.5, ...) {
 
   baseURL <- 'https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?format=json&benchmark=Public_AR_Current&address='
 
@@ -109,7 +178,7 @@ geocodeCensus <- function(addresses, ...) {
 
       }
 
-      Sys.sleep(1.5 * (index < max(indices)))
+      Sys.sleep(sleep * (index < max(indices)))
 
     }
 
@@ -122,6 +191,7 @@ geocodeCensus <- function(addresses, ...) {
 #' Geocode addreses using the Nominatim service provided by Open Street Map
 #' @param addresses a vector of address strings
 #' @param nominatimServiceURL the base address of the nominatim service to use; include everything that precedes the ?
+#' @param sleep number of seconds to sleep between requests (to avoid exceeding rate limits)
 #' @param ... unused
 #' @importFrom jsonlite fromJSON
 #' @import dplyr
@@ -129,7 +199,7 @@ geocodeCensus <- function(addresses, ...) {
 #' @importFrom purrr map2_df
 #' @return a data frame with the results of geocoding, with the SourceIndex column providing the index into the input address vector
 #' @export
-geocodeNominatim <- function(addresses, nominatimServiceURL='http://nominatim.openstreetmap.org', ...) {
+geocodeNominatim <- function(addresses, nominatimServiceURL='http://nominatim.openstreetmap.org', sleep=1.5, ...) {
 
   baseURL <- paste0(nominatimServiceURL, '?addressdetails=1&format=json&q=')
 
@@ -164,7 +234,7 @@ geocodeNominatim <- function(addresses, nominatimServiceURL='http://nominatim.op
         SourceIndex=index
       )
 
-      Sys.sleep(1.5 * (index < max(indices)))
+      Sys.sleep(sleep * (index < max(indices)))
 
     }
 
@@ -176,6 +246,7 @@ geocodeNominatim <- function(addresses, nominatimServiceURL='http://nominatim.op
 
 #' Geocode addreses using the Nominatim service provided by Open Street Map
 #' @param addresses a vector of address strings
+#' @param sleep number of seconds to sleep between requests (to avoid exceeding rate limits)
 #' @param ... unused
 #' @importFrom httr GET content
 #' @importFrom purrr map_df map2_df
@@ -183,7 +254,7 @@ geocodeNominatim <- function(addresses, nominatimServiceURL='http://nominatim.op
 #' @import dplyr
 #' @return a data frame with the results of geocoding, with the SourceIndex column providing the index into the input address vector
 #' @export
-geocodeGoogle <- function(addresses, ...) {
+geocodeGoogle <- function(addresses, sleep=1.5, ...) {
 
   baseURL <- 'https://maps.googleapis.com/maps/api/geocode/json?address='
 
@@ -244,7 +315,7 @@ geocodeGoogle <- function(addresses, ...) {
 
       }
 
-      Sys.sleep(1.5 * (index < max(indices)))
+      Sys.sleep(sleep * (index < max(indices)))
 
     }
 
