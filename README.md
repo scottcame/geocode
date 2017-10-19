@@ -1,16 +1,18 @@
 Overview
 --------
 
-The `geocode` package provides a facade to three freely-available but limited geocoding services:  US Census, Nominatim (Open Street Map), and Google.
+The `geocode` package provides a facade to three freely-available but limited geocoding services:  US Census, Nominatim (Open Street Map), Google, and ArcGIS's GeocodeServer.
 
 Each of these geocoding services is useful in its own right, but the goal of this package is to provide a seamless interface to all of them, and to use them in combination.  The Nominatim and Google services
 have usage limits, but allow for richer and more varied queries than the US Census geocoder.  A common use case is to try the US Census geocoder first, and if it doesn't succeed, then try the others.  This
-package implements this use case.
+package implements this use case. It executes Census, Nominatim, and Google geocoders, in that order, by default. The user can specify the specific geocoders to try, and the order, as an optional
+parameter to the `geocode` function.
 
-This package does not attempt to prevent the user from exceeding the rate/usage limits for [Google](https://developers.google.com/maps/documentation/geocoding/usage-limits) and 
+This package does not attempt to prevent the user from exceeding the rate/usage limits for ArcGIS, [Google](https://developers.google.com/maps/documentation/geocoding/usage-limits) and 
 [Nominatim](https://operations.osmfoundation.org/policies/nominatim/).  The `geocodeNominatim()` function takes an optional parameter, `nominatimServiceURL`, that directs the client to an alternative
 instance of Nominatim (e.g., one running locally or on a private network). Setting up Nominatim can be a bit of a chore, but I have made it a bit easier with [Docker](https://www.docker.com/) 
 [images](https://github.com/scottcame/docker/tree/master/nominatim).
+
 
 Installation
 ------------
