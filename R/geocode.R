@@ -1,13 +1,14 @@
 #' Geocode addresses using a hierarchy of geocoders, where later geocoders fill in gaps that earlier ones couldn't handle
 #' @param geocoders the geocoders to try, in order
 #' @param addresses the list of addresses to geocode
+#' @param notificationFunction a function called after each geocode to enable logging, etc.
 #' @param sleep number of seconds to sleep between requests (to avoid exceeding rate limits)
 #' @param ... additional named arguments passed to specific geocoder functions
 #' @import dplyr
 #' @import tibble
 #' @return a data frame with the results of geocoding, with the SourceIndex column providing the index into the input address vector
 #' @export
-geocode <- function(addresses, geocoders=c('Census', 'Nominatim', 'Google'), sleep=1.5, ...) {
+geocode <- function(addresses, geocoders=c('Census', 'Nominatim', 'Google'), sleep=1.5, notificationFunction=emptyFunction, ...) {
 
   ret <- tibble()
 
@@ -25,6 +26,7 @@ geocode <- function(addresses, geocoders=c('Census', 'Nominatim', 'Google'), sle
       args <- list()
       args$addresses <- missings
       args$sleep <- sleep
+      args$notificationFunction <- notificationFunction
       args <- c(args, list(...))
       ret <- bind_rows(ret, do.call(f, args))
       successes <- character()
@@ -52,6 +54,7 @@ geocode <- function(addresses, geocoders=c('Census', 'Nominatim', 'Google'), sle
 #' @param sleep number of seconds to sleep between requests (to avoid exceeding rate limits)
 #' @param arcgisServiceURL base URL of the service address, up to and including the last forward slash preceding "findAddressCandidates?"
 #' @param approximationThreshold the score value in the ArcGIS response below which a candidate is considered approximate
+#' @param notificationFunction a function called after each geocode to enable logging, etc.
 #' @param ... unused
 #' @importFrom jsonlite fromJSON
 #' @import dplyr
@@ -59,7 +62,8 @@ geocode <- function(addresses, geocoders=c('Census', 'Nominatim', 'Google'), sle
 #' @importFrom purrr map2_df
 #' @return a data frame with the results of geocoding, with the SourceIndex column providing the index into the input address vector
 #' @export
-geocodeArcGIS <- function(addresses, arcgisServiceURL='http://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/', approximationThreshold=90, sleep=1.5, ...) {
+geocodeArcGIS <- function(addresses, arcgisServiceURL='http://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/', approximationThreshold=90,
+                          sleep=1.5, notificationFunction=emptyFunction, ...) {
 
   baseURL <- paste0(arcgisServiceURL, 'findAddressCandidates?singleLine=')
 
@@ -107,6 +111,8 @@ geocodeArcGIS <- function(addresses, arcgisServiceURL='http://geocode.arcgis.com
 
     Sys.sleep(sleep * (index < max(indices)))
 
+    notificationFunction(address, index, ret)
+
     ret
 
   })
@@ -116,6 +122,7 @@ geocodeArcGIS <- function(addresses, arcgisServiceURL='http://geocode.arcgis.com
 #' Geocode addresses using the Census Geocoder
 #' @param addresses a vector of address strings
 #' @param sleep number of seconds to sleep between requests (to avoid exceeding rate limits)
+#' @param notificationFunction a function called after each geocode to enable logging, etc.
 #' @param ... unused
 #' @importFrom jsonlite fromJSON
 #' @import dplyr
@@ -123,7 +130,7 @@ geocodeArcGIS <- function(addresses, arcgisServiceURL='http://geocode.arcgis.com
 #' @importFrom purrr map2_df
 #' @return a data frame with the results of geocoding, with the SourceIndex column providing the index into the input address vector
 #' @export
-geocodeCensus <- function(addresses, sleep=1.5, ...) {
+geocodeCensus <- function(addresses, sleep=1.5, notificationFunction=emptyFunction, ...) {
 
   baseURL <- 'https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?format=json&benchmark=Public_AR_Current&address='
 
@@ -182,6 +189,8 @@ geocodeCensus <- function(addresses, sleep=1.5, ...) {
 
     }
 
+    notificationFunction(address, index, ret)
+
     ret
 
   })
@@ -192,6 +201,7 @@ geocodeCensus <- function(addresses, sleep=1.5, ...) {
 #' @param addresses a vector of address strings
 #' @param nominatimServiceURL the base address of the nominatim service to use; include everything that precedes the ?
 #' @param sleep number of seconds to sleep between requests (to avoid exceeding rate limits)
+#' @param notificationFunction a function called after each geocode to enable logging, etc.
 #' @param ... unused
 #' @importFrom jsonlite fromJSON
 #' @import dplyr
@@ -199,7 +209,7 @@ geocodeCensus <- function(addresses, sleep=1.5, ...) {
 #' @importFrom purrr map2_df
 #' @return a data frame with the results of geocoding, with the SourceIndex column providing the index into the input address vector
 #' @export
-geocodeNominatim <- function(addresses, nominatimServiceURL='http://nominatim.openstreetmap.org', sleep=1.5, ...) {
+geocodeNominatim <- function(addresses, nominatimServiceURL='http://nominatim.openstreetmap.org', sleep=1.5, notificationFunction=emptyFunction, ...) {
 
   baseURL <- paste0(nominatimServiceURL, '?addressdetails=1&format=json&q=')
 
@@ -238,6 +248,8 @@ geocodeNominatim <- function(addresses, nominatimServiceURL='http://nominatim.op
 
     }
 
+    notificationFunction(address, index, ret)
+
     ret
 
   })
@@ -247,14 +259,16 @@ geocodeNominatim <- function(addresses, nominatimServiceURL='http://nominatim.op
 #' Geocode addreses using the Nominatim service provided by Open Street Map
 #' @param addresses a vector of address strings
 #' @param sleep number of seconds to sleep between requests (to avoid exceeding rate limits)
+#' @param notificationFunction a function called after each geocode to enable logging, etc.
 #' @param ... unused
 #' @importFrom httr GET content
 #' @importFrom purrr map_df map2_df
 #' @import tibble
 #' @import dplyr
+#' @import tidyr
 #' @return a data frame with the results of geocoding, with the SourceIndex column providing the index into the input address vector
 #' @export
-geocodeGoogle <- function(addresses, sleep=1.5, ...) {
+geocodeGoogle <- function(addresses, sleep=1.5, notificationFunction=emptyFunction, ...) {
 
   baseURL <- 'https://maps.googleapis.com/maps/api/geocode/json?address='
 
@@ -319,8 +333,26 @@ geocodeGoogle <- function(addresses, sleep=1.5, ...) {
 
     }
 
+    notificationFunction(address, index, ret)
+
     ret
 
   })
 
 }
+
+#' Create a notification function that logs a progress message every n addresses
+#' @param n the frequency of notification
+#' @export
+createPeriodicNotificationFunction <- function(n) {
+  function(inputAddress, index, resultTibble) {
+    if(index %% n == 0) {
+      writeLines(paste0('Geocoded address # ', index))
+    }
+    invisible()
+  }
+}
+
+#' Default notification function that does nothing
+#' @export
+emptyFunction <- function(inputAddress, index, resultTibble) {invisible()}
