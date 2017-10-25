@@ -75,7 +75,7 @@ geocodeArcGIS <- function(addresses, arcgisServiceURL='http://geocode.arcgis.com
 
   map2_df(addresses, indices, function(address, index) {
 
-    url <- paste0(baseURL, URLencode(address), '&f=json&outFields=AddNum,StPreDir,StName,StType,StDir,City,Region,Postal')
+    url <- paste0(baseURL, URLencode(address), '&f=json&outFields=AddNum,StPreDir,StName,StType,StDir,City,Region,Postal,Addr_type')
     content <- fromJSON(url, simplifyDataFrame=FALSE)
 
     ret <- NULL
@@ -100,10 +100,12 @@ geocodeArcGIS <- function(addresses, arcgisServiceURL='http://geocode.arcgis.com
           InputAddress=address,
           Approximate=FALSE,
           Source='ArcGIS',
-          SourceIndex=index
+          SourceIndex=index,
+          Addr_type=candidate$attributes$Addr_type
         ) %>%
           mutate_if(is.character, function(v) {ifelse(trimws(v)=='', NA_character_, v)}) %>%
-          mutate(Approximate=candidate$score < approximationThreshold | is.na(Number))
+          mutate(Approximate=candidate$score < approximationThreshold | (is.na(Number) & Addr_type == 'StreetName')) %>%
+          select(-Addr_type)
 
       }
 

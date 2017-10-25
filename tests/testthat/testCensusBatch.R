@@ -49,6 +49,22 @@ test_that('Multiple addresses', {
 
 })
 
+test_that('Ties', {
+
+  result <- geocodeCensusBatch(
+    c('520 4th Ave E', '98-1277 KAAHUMANU ST'),
+    c('Olympia', 'PEARL CITY'),
+    c('WA', 'HI'),
+    c('98501', NA_character_))
+  expect_equal(nrow(result), 1L)
+
+  row <- result %>% filter(SourceIndex==1L)
+  expect_equal(row$Latitude, 47.04527, tolerance=.0001)
+  expect_equal(row$Longitude, -122.8964, tolerance=.0001)
+  expect_equal(row$Source, 'CensusBatch')
+
+})
+
 test_that('Bad address', {
 
   result <- geocodeCensusBatch('X', 'Y', 'WA', '98501')
