@@ -1,5 +1,4 @@
-Overview
---------
+### Overview
 
 The `geocode` package provides a facade to three freely-available but limited geocoding services:  US Census, Nominatim (Open Street Map), Google, and ArcGIS's GeocodeServer.
 
@@ -14,8 +13,7 @@ instance of Nominatim (e.g., one running locally or on a private network). Setti
 [images](https://github.com/scottcame/docker/tree/master/nominatim).
 
 
-Installation
-------------
+### Installation
 
 This package is not currently available on CRAN.  Install directly from github:
 
@@ -24,8 +22,14 @@ This package is not currently available on CRAN.  Install directly from github:
 devtools::install_github("scottcame/geocode")
 ```
 
-Usage
------
+### Usage
+
+There are two usage modes available through the package:
+
+* [Non-batch (address by address)](#non-batch-usage)
+* [Census Batch](#census-batch-usage)
+
+#### Non-Batch Usage
 
 Default usage, attempts Census first, then Nominatim, then Google:
 
@@ -97,4 +101,27 @@ Handling of duplicates in the input vector:
 2 1100-1298 1ST AVE S SEATTLE    WA 98134  47.5909 -122.3342 1250 1st Avenue South, Seattle, WA 98134       FALSE Census           2
 >
 ```
+#### Census Batch Usage
+
+The package provides an interface to the US Census Bureau's [batch geocoding service](https://geocoding.geo.census.gov/geocoder/locations/addressbatch?form).
+It automatically partitions the input data into chunks of the appropriate size (currently 999 records) and submits them via HTTP POST.
+
+Example:
+
+```
+> geocodeCensusBatch(
++     c('520 4th Ave E', '4550 Wyoga Lake Rd'),
++     c('Olympia', 'Cuyahoga Falls'),
++     c('WA', 'OH'),
++     c('98501', NA_character_))
+Processing batch 1 of 1
+Batch had 2 successful geocodes
+# A tibble: 2 x 11
+  SourceIndex                            InputAddress Match Status                                     Address  Longitude Latitude TIGERLineID  Side      Source Approximate
+        <int>                                   <chr> <chr>  <chr>                                       <chr>      <dbl>    <dbl>       <int> <chr>       <chr>       <lgl>
+1           2 4550 Wyoga Lake Rd, Cuyahoga Falls, OH, Match  Exact 4550 WYOGA LAKE RD, CUYAHOGA FLS, OH, 44224  -81.49443 41.19390    61393964     L CensusBatch       FALSE
+2           1       520 4th Ave E, Olympia, WA, 98501 Match  Exact           520 4TH AVE E, OLYMPIA, WA, 98501 -122.89642 47.04527   180944221     L CensusBatch       FALSE
+>
+```
+
 
