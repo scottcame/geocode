@@ -62,7 +62,7 @@ geocode <- function(addresses, geocoders=c('Census', 'Nominatim', 'Google'), sle
 #' @importFrom purrr map2_df
 #' @return a data frame with the results of geocoding, with the SourceIndex column providing the index into the input address vector
 #' @export
-geocodeArcGIS <- function(addresses, arcgisServiceURL='http://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/', approximationThreshold=90,
+geocodeArcGIS <- function(addresses, arcgisServiceURL='http://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/', approximationThreshold=85,
                           sleep=1.5, notificationFunction=emptyFunction, ...) {
 
   baseURL <- paste0(arcgisServiceURL, 'findAddressCandidates?singleLine=')
@@ -101,11 +101,13 @@ geocodeArcGIS <- function(addresses, arcgisServiceURL='http://geocode.arcgis.com
           Approximate=FALSE,
           Source='ArcGIS',
           SourceIndex=index,
-          Addr_type=candidate$attributes$Addr_type
+          Addr_type=candidate$attributes$Addr_type,
+          Score=candidate$score
         ) %>%
           mutate_if(is.character, function(v) {ifelse(trimws(v)=='', NA_character_, v)}) %>%
-          mutate(Approximate=candidate$score < approximationThreshold | (is.na(Number) & Addr_type == 'StreetName')) %>%
-          select(-Addr_type)
+          mutate(accurate_=candidate$score >= approximationThreshold &
+                   (Addr_type %in% c('StreetInt', 'POI') | (Addr_type %in% c('StreetName', 'PointAddress', 'StreetAddress') & !is.na(Number)))) %>%
+          mutate(Approximate=!accurate_) %>% select(-Addr_type, -accurate_, -Score)
 
       }
 

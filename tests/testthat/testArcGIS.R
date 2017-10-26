@@ -97,6 +97,31 @@ test_that('Non-address locations', {
 
 })
 
+test_that('Approximate', {
+
+  result <- geocodeArcGIS('Seattle, WA')
+  expect_equal(nrow(result), 1L)
+  row <- result[1,]
+
+  expect_equal(row$Number, NA_character_)
+  expect_equal(row$Approximate, TRUE)
+
+  result <- geocodeArcGIS('1st Avenue South, Seattle, WA')
+  expect_equal(nrow(result), 1L)
+  row <- result[1,]
+
+  expect_equal(row$Number, NA_character_)
+  expect_equal(row$Approximate, TRUE)
+
+  result <- geocodeArcGIS('1250 1st Avenue South, Seattle, WA')
+  expect_equal(nrow(result), 1L)
+  row <- result[1,]
+
+  expect_equal(row$Number, '1250')
+  expect_equal(row$Approximate, FALSE)
+
+})
+
 test_that('Empty input', {
   expect_equal(geocodeArcGIS(character()), tibble())
   expect_equal(geocodeArcGIS(NULL), tibble())
