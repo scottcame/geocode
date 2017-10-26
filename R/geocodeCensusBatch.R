@@ -1,3 +1,24 @@
+# Copyright 2017 Scott Came Consulting LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+#' Geocodes a batch of addresses via the US Census Bureau's batch geocoder
+#' @param street the street portion of the address (e.g., 123 Main St.)
+#' @param city the city portion of the address
+#' @param state the state portion of the address
+#' @param zip the zip (postal) code portion of the address
+#' @param sourceIndex a vector of identifiers to identify each address and correlate with the response
+#' @param quietly whether to suppress diagnostic/progress messages
 #' @importFrom readr write_csv read_csv read_lines
 #' @importFrom purrr pmap_df
 #' @importFrom tibble tibble
