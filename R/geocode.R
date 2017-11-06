@@ -274,10 +274,11 @@ geocodeNominatim <- function(addresses, nominatimServiceURL='http://nominatim.op
 
 }
 
-#' Geocode addreses using the Nominatim service provided by Open Street Map
+#' Geocode addreses using the Google geocoding API
 #' @param addresses a vector of address strings
 #' @param sleep number of seconds to sleep between requests (to avoid exceeding rate limits)
 #' @param notificationFunction a function called after each geocode to enable logging, etc.
+#' @param apiKey the Google API Key to use, or null (the default) to use no key
 #' @param ... unused
 #' @importFrom httr GET content
 #' @importFrom purrr map_df map2_df
@@ -286,9 +287,15 @@ geocodeNominatim <- function(addresses, nominatimServiceURL='http://nominatim.op
 #' @import tidyr
 #' @return a data frame with the results of geocoding, with the SourceIndex column providing the index into the input address vector
 #' @export
-geocodeGoogle <- function(addresses, sleep=1.5, notificationFunction=emptyFunction, ...) {
+geocodeGoogle <- function(addresses, sleep=1.5, notificationFunction=emptyFunction, apiKey=NULL, ...) {
 
-  baseURL <- 'https://maps.googleapis.com/maps/api/geocode/json?address='
+  baseURL <- 'https://maps.googleapis.com/maps/api/geocode/json?'
+
+  if (!is.null(apiKey)) {
+    baseURL <- paste0(baseURL, 'key=', apiKey, '&')
+  }
+
+  baseURL <- paste0(baseURL, 'address=')
 
   indices <- seq(length(addresses))
 
@@ -299,9 +306,34 @@ geocodeGoogle <- function(addresses, sleep=1.5, notificationFunction=emptyFuncti
   map2_df(addresses, indices, function(address, index) {
 
     url <- paste0(baseURL, URLencode(address))
-    content <- fromJSON(url, simplifyDataFrame=FALSE)
+
+    getContent <- function() {
+      ret <- NULL
+      tryCatch({
+        ret <- fromJSON(url, simplifyDataFrame=FALSE)
+      }, error=function(e) {
+        writeLines(e$message)
+      })
+      ret
+    }
+
+    content <- NULL
+    tries <- 0
+    maxTries <- 10
+    errSleep <- 30
+
+    content <- getContent()
+    while (is.null(content) & tries < maxTries) {
+      writeLines(paste0('Error encountered, sleeping for ', errSleep, ' seconds...'))
+      Sys.sleep(errSleep)
+      writeLines('...resuming')
+      content <- getContent()
+      tries <- tries + 1
+    }
 
     ret <- NULL
+
+    tryCatch({
 
     if (length(content) > 1) {
 
@@ -313,6 +345,7 @@ geocodeGoogle <- function(addresses, sleep=1.5, notificationFunction=emptyFuncti
 
         ac <- results$address_components
         location <- results$geometry$location
+        types <- results$types
 
         if (!is.null(ac)) {
 
@@ -328,6 +361,8 @@ geocodeGoogle <- function(addresses, sleep=1.5, notificationFunction=emptyFuncti
 
           if (nrow(filter(ret, field %in% c('administrative_area_level_1', 'postal_code')))) {
 
+            isIntersection <- 'intersection' %in% types
+
             ret <- ret %>%
               addNAField('street_number') %>%
               addNAField('route') %>%
@@ -339,7 +374,7 @@ geocodeGoogle <- function(addresses, sleep=1.5, notificationFunction=emptyFuncti
               mutate(locality=ifelse(is.na(locality), sublocality, locality)) %>%
               select(Number=street_number, Street=route, City=locality, State=administrative_area_level_1, Zip=postal_code) %>%
               mutate(Latitude=location$lat, Longitude=location$lng, Source='Google',
-                     Approximate=is.na(Number), InputAddress=address, SourceIndex=index)
+                     Approximate=(is.na(Number) & !isIntersection), InputAddress=address, SourceIndex=index)
 
           }
 
@@ -351,11 +386,27 @@ geocodeGoogle <- function(addresses, sleep=1.5, notificationFunction=emptyFuncti
 
     }
 
+    }, error=function(e) {
+      print(e)
+      writeLines(paste0('Address causing error: ', address))
+      writeLines('Geocoding will continue...')
+      ret <- NULL
+    })
+
+    if (!is.null(ret)) {
+      if ('field' %in% colnames(ret)) {
+        ret <- select(ret, -field)
+      }
+      if ('value' %in% colnames(ret)) {
+        ret <- select(ret, -value)
+      }
+    }
+
     notificationFunction(address, index, ret)
 
     ret
 
-  })
+  }) %>% filter(!is.na(SourceIndex))
 
 }
 
